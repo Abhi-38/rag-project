@@ -12,3 +12,5 @@ easyocr
 pillow
 opencv-python
 streamlit
+pypdf
+pymupdf
