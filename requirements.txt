@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+llama-index
+chromadb
+sentence-transformers
+ollama
+python-dotenv
+pydantic-settings
+python-docx
+docling
+easyocr
+pillow
+opencv-python
+streamlit
+pypdf
+pymupdf
