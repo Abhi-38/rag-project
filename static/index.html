@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical RAG Assistant 🏥🤖</title>
+    
+    <!-- Google Fonts & FontAwesome -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Marked.js for Markdown Rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #070a12;
+            --bg-card: rgba(15, 23, 42, 0.75);
+            --bg-card-hover: rgba(30, 41, 59, 0.85);
+            --border-glass: rgba(255, 255, 255, 0.1);
+            --border-glow: rgba(6, 182, 212, 0.3);
+            
+            --accent-cyan: #06b6d4;
+            --accent-blue: #3b82f6;
+            --accent-indigo: #6366f1;
+            --accent-emerald: #10b981;
+            --accent-rose: #f43f5e;
+            --accent-amber: #f59e0b;
+            
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            
+            --font-heading: 'Outfit', sans-serif;
+            --font-body: 'Inter', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(at 10% 10%, rgba(6, 182, 212, 0.12) 0px, transparent 50%),
+                radial-gradient(at 90% 90%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+                radial-gradient(at 50% 50%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* Glassmorphism Common Utility */
+        .glass-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        /* Top Header */
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 1rem 2rem;
+            background: rgba(7, 10, 18, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-glass);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .brand-logo {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-indigo));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            color: #fff;
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+        }
+
+        .brand-title {
+            font-family: var(--font-heading);
+            font-size: 1.35rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ffffff 30%, var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        /* System Status Badges */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status-badge {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--border-glass);
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-emerald);
+            box-shadow: 0 0 10px var(--accent-emerald);
+        }
+
+        .status-dot.pulse {
+            animation: pulse-animation 2s infinite;
+        }
+
+        @keyframes pulse-animation {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        /* Main Container & Layout */
+        .main-container {
+            max-width: 1400px;
+            width: 100%;
+            margin: 1.5rem auto;
+            padding: 0 1.5rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        /* Navigation Tabs */
+        .nav-tabs {
+            display: flex;
+            gap: 0.8rem;
+            border-bottom: 1px solid var(--border-glass);
+            padding-bottom: 0.5rem;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-family: var(--font-heading);
+            font-size: 0.95rem;
+            font-weight: 500;
+            padding: 0.6rem 1.2rem;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .tab-btn:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tab-btn.active {
+            color: #fff;
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(99, 102, 241, 0.2));
+            border: 1px solid var(--border-glow);
+            box-shadow: 0 4px 15px rgba(6, 182, 212, 0.15);
+        }
+
+        /* Tab Content Panels */
+        .tab-content {
+            display: none;
+            flex: 1;
+        }
+
+        .tab-content.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* QA Chat Section */
+        .chat-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: calc(82vh - 120px);
+            gap: 1rem;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            scroll-behavior: smooth;
+        }
+
+        /* Custom Scrollbar */
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+        .chat-messages::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+        }
+
+        /* Quick Suggestion Chips */
+        .suggestions-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            margin-bottom: 1rem;
+        }
+
+        .chip {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid var(--border-glass);
+            color: var(--text-secondary);
+            padding: 0.5rem 0.9rem;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .chip:hover {
+            background: rgba(6, 182, 212, 0.15);
+            border-color: var(--accent-cyan);
+            color: #fff;
+            transform: translateY(-2px);
+        }
+
+        /* Message Bubbles */
+        .message-row {
+            display: flex;
+            gap: 1rem;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message-row.user {
+            flex-direction: row-reverse;
+        }
+
+        .avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .message-row.user .avatar {
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-blue));
+            color: #fff;
+        }
+
+        .message-row.assistant .avatar {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-emerald));
+            color: #fff;
+        }
+
+        .message-bubble {
+            max-width: 80%;
+            padding: 1.2rem;
+            border-radius: 16px;
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+
+        .message-row.user .message-bubble {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(59, 130, 246, 0.25));
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            border-top-right-radius: 4px;
+        }
+
+        .message-row.assistant .message-bubble {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-top-left-radius: 4px;
+        }
+
+        /* Grounding & Citation Pills */
+        .grounded-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 0.8rem;
+        }
+
+        .grounded-badge.success {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--accent-emerald);
+        }
+
+        .grounded-badge.refusal {
+            background: rgba(244, 63, 94, 0.15);
+            border: 1px solid rgba(244, 63, 94, 0.3);
+            color: var(--accent-rose);
+        }
+
+        .citations-box {
+            margin-top: 1rem;
+            padding-top: 0.8rem;
+            border-top: 1px dashed var(--border-glass);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .citations-header {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .citations-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .citation-pill {
+            background: rgba(6, 182, 212, 0.1);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            color: var(--accent-cyan);
+            padding: 0.3rem 0.7rem;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        /* Retrieved Context Accordion Drawer */
+        .context-drawer {
+            margin-top: 1rem;
+            background: rgba(10, 15, 26, 0.6);
+            border: 1px solid var(--border-glass);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .context-drawer-btn {
+            width: 100%;
+            padding: 0.7rem 1rem;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .context-drawer-btn:hover {
+            background: rgba(255, 255, 255, 0.04);
+            color: #fff;
+        }
+
+        .context-drawer-content {
+            display: none;
+            padding: 1rem;
+            border-top: 1px solid var(--border-glass);
+            font-size: 0.83rem;
+            color: var(--text-secondary);
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .context-snippet-item {
+            background: rgba(15, 23, 42, 0.8);
+            border-left: 3px solid var(--accent-cyan);
+            padding: 0.75rem;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .context-snippet-meta {
+            font-size: 0.74rem;
+            color: var(--accent-cyan);
+            margin-bottom: 0.4rem;
+            font-weight: 600;
+        }
+
+        /* Input Form Bar */
+        .input-bar-container {
+            padding: 1rem;
+            display: flex;
+            gap: 0.8rem;
+            align-items: center;
+        }
+
+        .input-bar {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid var(--border-glass);
+            border-radius: 14px;
+            padding: 0.8rem 1.2rem;
+            color: #fff;
+            font-family: var(--font-body);
+            font-size: 0.95rem;
+            outline: none;
+            transition: all 0.25s ease;
+        }
+
+        .input-bar:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.2);
+        }
+
+        .send-btn {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-indigo));
+            border: none;
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            color: #fff;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+        }
+
+        .send-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(6, 182, 212, 0.4);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Tab 2: Document Ingestion Layout */
+        .ingest-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .upload-zone {
+            border: 2px dashed var(--border-glow);
+            border-radius: 16px;
+            padding: 3rem 2rem;
+            text-align: center;
+            background: rgba(6, 182, 212, 0.03);
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            background: rgba(6, 182, 212, 0.08);
+            border-color: var(--accent-cyan);
+            transform: translateY(-2px);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            color: var(--accent-cyan);
+        }
+
+        .path-input-group {
+            display: flex;
+            gap: 0.8rem;
+            margin-top: 1rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--border-glass);
+            border-radius: 10px;
+            color: #fff;
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .form-control:focus {
+            border-color: var(--accent-cyan);
+        }
+
+        .primary-btn {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-indigo));
+            border: none;
+            color: #fff;
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .primary-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        /* Ingestion Step Progress */
+        .progress-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .progress-step {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.8rem 1rem;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 10px;
+            border: 1px solid var(--border-glass);
+        }
+
+        .step-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .progress-step.active .step-icon {
+            background: var(--accent-cyan);
+            color: #fff;
+            box-shadow: 0 0 10px var(--accent-cyan);
+        }
+
+        .progress-step.completed .step-icon {
+            background: var(--accent-emerald);
+            color: #fff;
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border-left-color: var(--accent-cyan);
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Top Navigation Header -->
+    <header>
+        <div class="brand">
+            <div class="brand-logo">
+                <i class="fa-solid fa-user-doctor"></i>
+            </div>
+            <div>
+                <div class="brand-title">Medical RAG Assistant</div>
+                <div class="brand-subtitle">Private Grounded AI for MBBS Study Material</div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-badge">
+                <div class="status-dot pulse"></div>
+                <span>Ollama (Llama 3.1)</span>
+            </div>
+            <div class="status-badge">
+                <i class="fa-solid fa-layer-group" style="color: var(--accent-cyan)"></i>
+                <span>Hybrid RAG (BGE-M3 + BM25)</span>
+            </div>
+            <div class="status-badge" id="db-count-badge">
+                <i class="fa-solid fa-database" style="color: var(--accent-indigo)"></i>
+                <span id="indexed-chunks-count">Loading DB Stats...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <div class="main-container">
+        
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab('qa-tab', this)">
+                <i class="fa-solid fa-comments"></i> Medical Assistant Q&A
+            </button>
+            <button class="tab-btn" onclick="switchTab('ingest-tab', this)">
+                <i class="fa-solid fa-file-arrow-up"></i> Document Ingestion
+            </button>
+        </div>
+
+        <!-- TAB 1: Medical Assistant QA -->
+        <div id="qa-tab" class="tab-content active">
+            <div class="glass-card chat-wrapper">
+                
+                <!-- Chat Messages Area -->
+                <div class="chat-messages" id="chat-messages">
+                    
+                    <!-- Welcome Initial Message -->
+                    <div class="message-row assistant">
+                        <div class="avatar">
+                            <i class="fa-solid fa-robot"></i>
+                        </div>
+                        <div class="message-bubble">
+                            <div class="grounded-badge success">
+                                <i class="fa-solid fa-shield-halved"></i> Strictly Grounded Engine Active
+                            </div>
+                            <p>Hello! I am your private Medical AI Study Assistant. Ask any clinical question from your uploaded medical textbooks or notes.</p>
+                            
+                            <div style="margin-top: 1rem;">
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Suggested Study Questions:</div>
+                                <div class="suggestions-container">
+                                    <div class="chip" onclick="useSuggestion('What are the primary clinical indications for surgical intervention in intracerebral hemorrhage?')">
+                                        <i class="fa-solid fa-brain"></i> Indications for Surgery in Intracerebral Hemorrhage
+                                    </div>
+                                    <div class="chip" onclick="useSuggestion('How is trigeminal neuralgia diagnosed and treated according to clinical guidelines?')">
+                                        <i class="fa-solid fa-stethoscope"></i> Trigeminal Neuralgia Diagnosis & Treatment
+                                    </div>
+                                    <div class="chip" onclick="useSuggestion('What parameters and scoring categories constitute the Glasgow Coma Scale (GCS)?')">
+                                        <i class="fa-solid fa-clipboard-check"></i> Glasgow Coma Scale (GCS) Assessment
+                                    </div>
+                                    <div class="chip" onclick="useSuggestion('How is hyperpyrexia defined and managed in acute patients?')">
+                                        <i class="fa-solid fa-temperature-arrow-up"></i> Hyperpyrexia Management
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Input Action Bar -->
+                <div class="input-bar-container">
+                    <input type="text" id="user-query-input" class="input-bar" placeholder="Ask a medical study question (e.g., Carbamazepine dosage in neuralgia)..." onkeydown="if(event.key === 'Enter') submitQuery()">
+                    <button class="send-btn" id="send-btn" onclick="submitQuery()">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- TAB 2: Document Ingestion -->
+        <div id="ingest-tab" class="tab-content">
+            <div class="ingest-grid">
+                
+                <!-- Upload & Path Panel -->
+                <div class="glass-card" style="padding: 1.5rem;">
+                    <h3 style="font-family: var(--font-heading); margin-bottom: 1rem; color: var(--text-primary)">
+                        <i class="fa-solid fa-cloud-arrow-up" style="color: var(--accent-cyan)"></i> Upload Medical Document
+                    </h3>
+                    
+                    <!-- Drag & Drop Zone -->
+                    <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+                        <i class="fa-solid fa-file-pdf upload-icon"></i>
+                        <div>
+                            <div style="font-weight: 600; font-size: 1.05rem;">Click or Drag & Drop PDF / DOCX file</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.3rem;">Supports Medical Textbooks, Articles & Lecture Notes</div>
+                        </div>
+                        <input type="file" id="file-input" style="display: none" accept=".pdf,.docx,.doc" onchange="handleFileSelect(event)">
+                    </div>
+
+                    <div style="text-align: center; margin: 1.2rem 0; color: var(--text-muted); font-size: 0.85rem;">— OR INGEST LOCAL SERVER FILE PATH —</div>
+
+                    <div class="path-input-group">
+                        <input type="text" id="file-path-input" class="form-control" placeholder="./data/sample_docs/your_medical_book.pdf">
+                        <button class="primary-btn" onclick="ingestViaPath()">
+                            <i class="fa-solid fa-gears"></i> Ingest Path
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Pipeline Status Panel -->
+                <div class="glass-card" style="padding: 1.5rem;">
+                    <h3 style="font-family: var(--font-heading); margin-bottom: 1rem; color: var(--text-primary)">
+                        <i class="fa-solid fa-list-check" style="color: var(--accent-indigo)"></i> Ingestion Pipeline Status
+                    </h3>
+
+                    <div id="ingestion-result-box" style="font-size: 0.9rem; line-height: 1.6; color: var(--text-secondary)">
+                        Select or upload a document to begin processing into ChromaDB.
+                    </div>
+
+                    <div class="progress-list" id="progress-list" style="display: none">
+                        <div class="progress-step active" id="step-1">
+                            <div class="step-icon"><i class="fa-solid fa-file-code"></i></div>
+                            <div>
+                                <div style="font-weight: 600; font-size: 0.88rem; color: #fff;">1. Document Parsing & Heading Extraction</div>
+                                <div style="font-size: 0.76rem; color: var(--text-muted)">PyMuPDF / DOCX page & chapter parsing</div>
+                            </div>
+                        </div>
+                        <div class="progress-step" id="step-2">
+                            <div class="step-icon"><i class="fa-solid fa-sitemap"></i></div>
+                            <div>
+                                <div style="font-weight: 600; font-size: 0.88rem; color: #fff;">2. Parent-Child Chunking</div>
+                                <div style="font-size: 0.76rem; color: var(--text-muted)">Parent: 1000ch | Child: 250ch linked chunks</div>
+                            </div>
+                        </div>
+                        <div class="progress-step" id="step-3">
+                            <div class="step-icon"><i class="fa-solid fa-vector-square"></i></div>
+                            <div>
+                                <div style="font-weight: 600; font-size: 0.88rem; color: #fff;">3. BGE-M3 Dense Embedding Generation</div>
+                                <div style="font-size: 0.76rem; color: var(--text-muted)">SentenceTransformers vector encoding</div>
+                            </div>
+                        </div>
+                        <div class="progress-step" id="step-4">
+                            <div class="step-icon"><i class="fa-solid fa-database"></i></div>
+                            <div>
+                                <div style="font-weight: 600; font-size: 0.88rem; color: #fff;">4. ChromaDB Dual-Collection Indexing</div>
+                                <div style="font-size: 0.76rem; color: var(--text-muted)">Persistent child & parent collections</div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Tab Switch Logic
+        function switchTab(tabId, btn) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(tabId).classList.add('active');
+            btn.classList.add('active');
+        }
+
+        // Fetch DB Stats on Load
+        async function fetchStats() {
+            try {
+                const res = await fetch('/api/ingest/stats');
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('indexed-chunks-count').innerText = `${data.total_child_chunks} Child Chunks Indexed`;
+                }
+            } catch (err) {
+                document.getElementById('indexed-chunks-count').innerText = `DB Status: Online`;
+            }
+        }
+        fetchStats();
+
+        // Use Chip Suggestion
+        function useSuggestion(text) {
+            document.getElementById('user-query-input').value = text;
+            submitQuery();
+        }
+
+        // Submit Query to /api/query
+        async function submitQuery() {
+            const inputEl = document.getElementById('user-query-input');
+            const query = inputEl.value.trim();
+            if (!query) return;
+
+            const chatMessages = document.getElementById('chat-messages');
+            const sendBtn = document.getElementById('send-btn');
+
+            // 1. Append User Message
+            const userMsgHTML = `
+                <div class="message-row user">
+                    <div class="avatar"><i class="fa-solid fa-user"></i></div>
+                    <div class="message-bubble">
+                        <p>${escapeHTML(query)}</p>
+                    </div>
+                </div>
+            `;
+            chatMessages.insertAdjacentHTML('beforeend', userMsgHTML);
+            inputEl.value = '';
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            // 2. Append Loading Assistant Bubble
+            const loadingId = 'loading-' + Date.now();
+            const loadingHTML = `
+                <div class="message-row assistant" id="${loadingId}">
+                    <div class="avatar"><i class="fa-solid fa-robot"></i></div>
+                    <div class="message-bubble">
+                        <div style="display: flex; align-items: center; gap: 0.6rem; color: var(--text-secondary);">
+                            <div class="spinner"></div>
+                            <span>Performing Hybrid Search & Context Synthesis...</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            chatMessages.insertAdjacentHTML('beforeend', loadingHTML);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            sendBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query })
+                });
+
+                const data = await response.json();
+                document.getElementById(loadingId).remove();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Query execution failed.');
+                }
+
+                // Render Response Bubble
+                renderAssistantResponse(data);
+                fetchStats();
+
+            } catch (err) {
+                document.getElementById(loadingId).remove();
+                const errorHTML = `
+                    <div class="message-row assistant">
+                        <div class="avatar"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                        <div class="message-bubble">
+                            <div class="grounded-badge refusal"><i class="fa-solid fa-circle-xmark"></i> System Error</div>
+                            <p style="color: var(--accent-rose);">${escapeHTML(err.message)}</p>
+                        </div>
+                    </div>
+                `;
+                chatMessages.insertAdjacentHTML('beforeend', errorHTML);
+            } finally {
+                sendBtn.disabled = false;
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
+        // Render Assistant Response Bubble
+        function renderAssistantResponse(data) {
+            const chatMessages = document.getElementById('chat-messages');
+            const isGrounded = data.grounded;
+            const parsedAnswer = marked.parse(data.answer);
+
+            let sourcesHTML = '';
+            if (data.sources && data.sources.length > 0) {
+                const pills = data.sources.map(s => {
+                    const pageStr = s.page ? `Page ${s.page}` : 'Doc';
+                    return `
+                        <div class="citation-pill">
+                            <i class="fa-solid fa-book-medical"></i>
+                            <span>${escapeHTML(s.source)} | ${pageStr} | ${escapeHTML(s.heading || 'General')}</span>
+                        </div>
+                    `;
+                }).join('');
+
+                sourcesHTML = `
+                    <div class="citations-box">
+                        <div class="citations-header"><i class="fa-solid fa-quote-left"></i> Verified Sources (${data.sources.length})</div>
+                        <div class="citations-list">${pills}</div>
+                    </div>
+                `;
+            }
+
+            let contextsDrawerHTML = '';
+            if (data.retrieved_contexts && data.retrieved_contexts.length > 0) {
+                const drawerId = 'drawer-' + Date.now();
+                const snippetItems = data.retrieved_contexts.map((c, i) => {
+                    const meta = c.metadata || {};
+                    return `
+                        <div class="context-snippet-item">
+                            <div class="context-snippet-meta">
+                                Context ${i+1} | Source: ${escapeHTML(meta.source || 'Doc')} | Page ${meta.page || 'N/A'} | Section: ${escapeHTML(meta.heading || 'General')} | Relevance Score: ${c.score ? c.score.toFixed(4) : 'N/A'}
+                            </div>
+                            <div>${escapeHTML(c.text)}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                contextsDrawerHTML = `
+                    <div class="context-drawer">
+                        <button class="context-drawer-btn" onclick="toggleDrawer('${drawerId}')">
+                            <span><i class="fa-solid fa-network-wired"></i> Inspect ${data.retrieved_contexts.length} Hydrated Parent Contexts</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="context-drawer-content" id="${drawerId}">
+                            ${snippetItems}
+                        </div>
+                    </div>
+                `;
+            }
+
+            const badgeHTML = isGrounded 
+                ? `<div class="grounded-badge success"><i class="fa-solid fa-circle-check"></i> Grounded Medical Evidence</div>`
+                : `<div class="grounded-badge refusal"><i class="fa-solid fa-ban"></i> Refusal / Insufficient Evidence</div>`;
+
+            const assistantMsgHTML = `
+                <div class="message-row assistant">
+                    <div class="avatar"><i class="fa-solid fa-user-doctor"></i></div>
+                    <div class="message-bubble">
+                        ${badgeHTML}
+                        <div class="markdown-body">${parsedAnswer}</div>
+                        ${sourcesHTML}
+                        ${contextsDrawerHTML}
+                    </div>
+                </div>
+            `;
+            chatMessages.insertAdjacentHTML('beforeend', assistantMsgHTML);
+        }
+
+        function toggleDrawer(id) {
+            const el = document.getElementById(id);
+            if (el.style.display === 'flex') {
+                el.style.display = 'none';
+            } else {
+                el.style.display = 'flex';
+            }
+        }
+
+        // Handle Drag & Drop Upload
+        const dropZone = document.getElementById('drop-zone');
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                uploadFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        function handleFileSelect(e) {
+            if (e.target.files.length > 0) {
+                uploadFile(e.target.files[0]);
+            }
+        }
+
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const resultBox = document.getElementById('ingestion-result-box');
+            const progressList = document.getElementById('progress-list');
+
+            progressList.style.display = 'flex';
+            resultBox.innerHTML = `<div style="display: flex; align-items: center; gap: 0.5rem;"><div class="spinner"></div> Ingesting document: <b>${escapeHTML(file.name)}</b>...</div>`;
+
+            try {
+                const res = await fetch('/api/ingest/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.detail || 'Upload failed');
+
+                resultBox.innerHTML = `
+                    <div style="color: var(--accent-emerald); font-weight: 600; margin-bottom: 0.5rem;">
+                        <i class="fa-solid fa-circle-check"></i> Ingestion Successful!
+                    </div>
+                    <div><b>Document:</b> ${escapeHTML(data.file)}</div>
+                    <div><b>Parent Chunks Indexed:</b> ${data.parent_chunks_indexed}</div>
+                    <div><b>Child Chunks Indexed:</b> ${data.child_chunks_indexed}</div>
+                    <div><b>Total Vector DB Count:</b> ${data.vector_db_child_count}</div>
+                `;
+                fetchStats();
+            } catch (err) {
+                resultBox.innerHTML = `<div style="color: var(--accent-rose); font-weight: 600;"><i class="fa-solid fa-circle-xmark"></i> Ingestion Error: ${escapeHTML(err.message)}</div>`;
+            }
+        }
+
+        async function ingestViaPath() {
+            const input = document.getElementById('file-path-input').value.trim();
+            if (!input) return;
+
+            const resultBox = document.getElementById('ingestion-result-box');
+            resultBox.innerHTML = `<div style="display: flex; align-items: center; gap: 0.5rem;"><div class="spinner"></div> Processing document path: <b>${escapeHTML(input)}</b>...</div>`;
+
+            try {
+                const res = await fetch('/api/ingest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_path: input })
+                });
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.detail || 'Ingestion failed');
+
+                resultBox.innerHTML = `
+                    <div style="color: var(--accent-emerald); font-weight: 600; margin-bottom: 0.5rem;">
+                        <i class="fa-solid fa-circle-check"></i> Ingestion Successful!
+                    </div>
+                    <div><b>Document:</b> ${escapeHTML(data.file)}</div>
+                    <div><b>Parent Chunks Indexed:</b> ${data.parent_chunks_indexed}</div>
+                    <div><b>Child Chunks Indexed:</b> ${data.child_chunks_indexed}</div>
+                    <div><b>Total Vector DB Count:</b> ${data.vector_db_child_count}</div>
+                `;
+                fetchStats();
+            } catch (err) {
+                resultBox.innerHTML = `<div style="color: var(--accent-rose); font-weight: 600;"><i class="fa-solid fa-circle-xmark"></i> Ingestion Error: ${escapeHTML(err.message)}</div>`;
+            }
+        }
+
+        function escapeHTML(str) {
+            if (!str) return '';
+            return str.replace(/[&<>'"]/g, 
+                tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+            );
+        }
+    </script>
+</body>
+</html>
