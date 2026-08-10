@@ -1,19 +1,33 @@
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any, Dict
 
-from app.ingestion.parsers.pdf_parser import PDFParser
+from app.core.config import settings
+from app.ingestion.chunking.chunker import ParentChildChunker
 from app.ingestion.parsers.docx_parser import DOCXParser
-from app.ingestion.chunking.chunker import SemanticChunker
+from app.ingestion.parsers.pdf_parser import PDFParser
+
 
 class IngestionPipeline:
-    """Orchestrates parsing and semantic chunking of medical documents."""
+    """Orchestrates document parsing and Parent-Child chunking for medical documents."""
 
-    def __init__(self, chunk_size: int = 800, chunk_overlap: int = 150):
-        self.chunker = SemanticChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    def __init__(
+        self,
+        parent_size: int = settings.PARENT_CHUNK_SIZE,
+        parent_overlap: int = settings.PARENT_CHUNK_OVERLAP,
+        child_size: int = settings.CHILD_CHUNK_SIZE,
+        child_overlap: int = settings.CHILD_CHUNK_OVERLAP,
+    ):
+        self.chunker = ParentChildChunker(
+            parent_size=parent_size,
+            parent_overlap=parent_overlap,
+            child_size=child_size,
+            child_overlap=child_overlap,
+        )
 
-    def process_file(self, file_path: str) -> List[Dict[str, Any]]:
+    def process_file(self, file_path: str) -> Dict[str, Any]:
         """
-        Parses a PDF or DOCX document and splits it into semantic chunks with preserved metadata.
+        Parses a PDF or DOCX file and generates linked Parent and Child chunks.
+        Returns dict: {'parents': [...], 'children': [...]}
         """
         path = Path(file_path)
         if not path.exists():
@@ -28,10 +42,10 @@ class IngestionPipeline:
         else:
             raise ValueError(f"Unsupported file format: {suffix}. Supported formats: .pdf, .docx")
 
-        # 1. Parse document into pages/sections
+        # 1. Parse document pages/sections
         documents = parser.parse()
 
-        # 2. Split into semantic chunks
-        chunks = self.chunker.chunk_documents(documents)
+        # 2. Generate linked parent & child chunks
+        chunks = self.chunker.create_chunks(documents)
 
         return chunks
