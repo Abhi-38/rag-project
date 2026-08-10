@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
-from app.ingestion.embedder import EmbeddingService
-from app.services.vector_store import VectorStoreManager
+from app.services.embedding_service import EmbeddingService
+from app.services.vector_store import VectorStoreService
 from app.services.hybrid_retriever import HybridRetriever
 from app.services.rag_chain import RAGChain
 
@@ -25,7 +25,7 @@ class QueryResponse(BaseModel):
     retrieved_contexts: Optional[List[Dict[str, Any]]] = None
 
 embedder = EmbeddingService()
-vector_store = VectorStoreManager()
+vector_store = VectorStoreService()
 hybrid_retriever = HybridRetriever(vector_store=vector_store, embedder=embedder)
 rag_chain = RAGChain()
 
@@ -35,10 +35,10 @@ def query_medical_assistant(req: QueryRequest):
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query string cannot be empty.")
 
-    # 1. Hybrid Retrieval (Vector + BM25 + RRF + Rerank + Parent Context)
+    # 1. Hybrid Retrieval (Vector + BM25 + RRF + Rerank + Evidence Gate + Parent Context Hydration)
     contexts = hybrid_retriever.retrieve(req.query)
 
-    # 2. RAG LLM Context Synthesis & Citation Generation
+    # 2. Grounded LLM Context Synthesis & Citation Generation
     result = rag_chain.generate_response(req.query, contexts)
 
     return QueryResponse(
