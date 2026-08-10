@@ -1,50 +1,95 @@
 import uuid
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-class SemanticChunker:
+from app.core.config import settings
+
+
+class ParentChildChunker:
     """
-    Semantic Document Chunker.
-    Uses sentence & paragraph boundaries with chunk_size=800 and chunk_overlap=150.
-    Preserves document metadata (source, page, chunk_id).
+    Implements canonical Parent-Child document chunking.
+    Parent chunks provide broad context for generation; Child chunks provide precision for search.
     """
 
-    def __init__(self, chunk_size: int = 800, chunk_overlap: int = 150):
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
-        self.splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            separators=["\n\n", "\n", ". ", "? ", "! ", " ", ""]
+    def __init__(
+        self,
+        parent_size: int = settings.PARENT_CHUNK_SIZE,
+        parent_overlap: int = settings.PARENT_CHUNK_OVERLAP,
+        child_size: int = settings.CHILD_CHUNK_SIZE,
+        child_overlap: int = settings.CHILD_CHUNK_OVERLAP,
+    ):
+        self.parent_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=parent_size,
+            chunk_overlap=parent_overlap,
+            separators=["\n\n", "\n", ". ", "? ", "! ", " ", ""],
+        )
+        self.child_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=child_size,
+            chunk_overlap=child_overlap,
+            separators=["\n\n", "\n", ". ", "? ", "! ", " ", ""],
         )
 
-    def chunk_documents(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def create_chunks(self, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Splits input documents into semantically coherent chunks with preserved metadata.
-        Input format: [{'text': '...', 'metadata': {'source': '...', 'page': 1}}]
-        Output format: [{'chunk_id': '...', 'text': '...', 'metadata': {'source': '...', 'page': 1, 'chunk_id': '...'}}]
+        Splits input parsed documents into linked Parent and Child chunk lists.
+        Input documents: List of dicts with 'text' and 'metadata' ({source, page, heading, file_type}).
+        Output dict: {'parents': [...], 'children': [...]}
         """
-        processed_chunks = []
+        parents_list = []
+        children_list = []
 
         for doc in documents:
             text = doc.get("text", "")
-            base_metadata = doc.get("metadata", {}).copy()
-            
+            base_meta = doc.get("metadata", {}).copy()
+
             if not text.strip():
                 continue
 
-            split_texts = self.splitter.split_text(text)
+            source = base_meta.get("source", "doc")
+            page = base_meta.get("page")
+            page_str = f"p{page}" if page is not None else "pNA"
 
-            for idx, chunk_text in enumerate(split_texts):
-                chunk_id = f"{base_metadata.get('source', 'doc')}_p{base_metadata.get('page', 1)}_c{idx}_{uuid.uuid4().hex[:6]}"
-                
-                chunk_meta = base_metadata.copy()
-                chunk_meta["chunk_id"] = chunk_id
+            # 1. Split document into parent chunks
+            parent_texts = self.parent_splitter.split_text(text)
 
-                processed_chunks.append({
-                    "chunk_id": chunk_id,
-                    "text": chunk_text,
-                    "metadata": chunk_meta
-                })
+            for p_idx, p_text in enumerate(parent_texts):
+                parent_id = f"{source}_{page_str}_p{p_idx}_{uuid.uuid4().hex[:6]}"
 
-        return processed_chunks
+                parent_meta = base_meta.copy()
+                parent_meta["parent_id"] = parent_id
+                parent_meta["type"] = "parent"
+                parent_meta = {k: v for k, v in parent_meta.items() if v is not None}
+
+                parent_obj = {
+                    "parent_id": parent_id,
+                    "text": p_text,
+                    "metadata": parent_meta,
+                }
+                parents_list.append(parent_obj)
+
+                # 2. Split parent chunk into child chunks
+                child_texts = self.child_splitter.split_text(p_text)
+                for c_idx, c_text in enumerate(child_texts):
+                    child_id = f"{parent_id}_c{c_idx}"
+
+                    child_meta = base_meta.copy()
+                    child_meta["child_id"] = child_id
+                    child_meta["parent_id"] = parent_id
+                    child_meta["type"] = "child"
+                    child_meta = {k: v for k, v in child_meta.items() if v is not None}
+
+                    heading_str = base_meta.get("heading", "General")
+                    page_label = f"Page {page}" if page is not None else "Doc"
+                    formatted_text = f"[Context: {heading_str} ({page_label})]\n{c_text}"
+
+                    child_obj = {
+                        "child_id": child_id,
+                        "parent_id": parent_id,
+                        "text": formatted_text,
+                        "raw_text": c_text,
+                        "metadata": child_meta,
+                    }
+                    children_list.append(child_obj)
+
+        return {"parents": parents_list, "children": children_list}

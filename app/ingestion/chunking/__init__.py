@@ -1,3 +1,4 @@
-from .chunker import SemanticChunker
+from .chunker import ParentChildChunker
 
-__all__ = ["SemanticChunker"]
+__all__ = ["ParentChildChunker"]
+
