@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from app.ingestion.loaders.pipeline import IngestionPipeline
 from app.services.embedding_service import EmbeddingService
@@ -9,13 +10,16 @@ from app.services.vector_store import VectorStoreService
 
 router = APIRouter(prefix="/api/ingest", tags=["Ingestion"])
 
+
 class IngestRequest(BaseModel):
     file_path: str
+
 
 # Singleton service instances
 embedder = EmbeddingService()
 vector_store = VectorStoreService()
 pipeline = IngestionPipeline()
+
 
 def process_document_ingestion(doc_path: str) -> Dict[str, Any]:
     """Canonical document ingestion pipeline function: Parses, chunks (Parent-Child), embeds, and stores in ChromaDB."""
@@ -46,13 +50,49 @@ def process_document_ingestion(doc_path: str) -> Dict[str, Any]:
         "file": path.name,
         "parent_chunks_indexed": len(parents),
         "child_chunks_indexed": len(children),
-        "vector_db_child_count": vector_store.count()
+        "vector_db_child_count": vector_store.count(),
     }
+
+
+@router.get("/stats")
+def get_ingestion_stats():
+    """Returns total count of indexed document chunks in ChromaDB."""
+    return {
+        "status": "online",
+        "total_child_chunks": vector_store.count(),
+    }
+
 
 @router.post("")
 def ingest_document(req: IngestRequest):
-    """Triggers document ingestion pipeline."""
+    """Triggers document ingestion pipeline from file path."""
     res = process_document_ingestion(req.file_path)
+    if res.get("status") == "error":
+        raise HTTPException(status_code=400, detail=res["message"])
+    return res
+
+
+@router.post("/upload")
+async def upload_and_ingest_document(file: UploadFile = File(...)):
+    """Uploads a PDF or DOCX document and triggers document ingestion pipeline."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename missing.")
+
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in [".pdf", ".docx", ".doc"]:
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported file format '{suffix}'. Only .pdf and .docx are supported."
+        )
+
+    save_dir = Path("./data/sample_docs")
+    save_dir.mkdir(parents=True, exist_ok=True)
+    file_path = save_dir / file.filename
+
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    res = process_document_ingestion(str(file_path))
     if res.get("status") == "error":
         raise HTTPException(status_code=400, detail=res["message"])
     return res
