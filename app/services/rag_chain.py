@@ -1,17 +1,16 @@
 import requests
-import json
 from typing import List, Dict, Any
 from app.core.config import settings
 
 class RAGChain:
-    """Manages medical context synthesis, LLM generation, and citation formatting."""
+    """Manages medical context synthesis, LLM generation, citation formatting, and refusal handling."""
 
     SYSTEM_PROMPT = """You are a specialized Medical AI Assistant providing accurate, grounded answers based strictly on the provided medical study documents.
 
 STRICT RULES:
 1. Answer ONLY using the facts explicitly stated in the provided Context Snippets.
 2. Do NOT assume, extrapolate, or bring in outside medical knowledge.
-3. If the answer cannot be directly determined from the provided context, state clearly: "I cannot find sufficient evidence in the provided medical documents to answer this question."
+3. If the answer cannot be directly determined from the provided context, state clearly: "I could not find sufficient evidence in the uploaded medical documents to answer this question."
 4. Every clinical statement or recommendation MUST include source citations referencing the Page and Chapter/Heading provided in the context tags.
 
 Format your response clearly using bullet points and section headings where appropriate.
@@ -26,22 +25,24 @@ Format your response clearly using bullet points and section headings where appr
         context_str = ""
         for idx, ctx in enumerate(contexts, start=1):
             meta = ctx.get("metadata", {})
-            page = meta.get("page", "Unknown")
+            page = meta.get("page")
+            page_label = f"Page {page}" if page is not None else "Doc"
             source = meta.get("source", "Medical Document")
             heading = meta.get("heading", "General")
 
             context_str += f"\n--- Context Snippet {idx} ---\n"
-            context_str += f"Source: {source} | Page: {page} | Section: {heading}\n"
+            context_str += f"Source: {source} | {page_label} | Section: {heading}\n"
             context_str += f"Content:\n{ctx['text']}\n"
 
         prompt = f"Medical Query: {query}\n\nContext Snippets:\n{context_str}\n\nAnswer:"
         return prompt
 
     def generate_response(self, query: str, contexts: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Generates grounded response using Ollama local API or structured fallback."""
+        """Generates grounded response using Ollama local API or structured refusal/error handling."""
+        # 1. Evidence sufficiency check refusal
         if not contexts:
             return {
-                "answer": "No relevant medical context was found in the indexed documents.",
+                "answer": "I could not find sufficient evidence in the uploaded medical documents to answer this question.",
                 "sources": [],
                 "grounded": False
             }
@@ -79,21 +80,16 @@ Format your response clearly using bullet points and section headings where appr
                     "grounded": True
                 }
         except Exception as e:
-            # If local Ollama endpoint is offline/not running, return structured context synthesis fallback
-            fallback_answer = f"**[Ollama LLM Offline]** - Synthesized context retrieved from medical sources:\n\n"
-            for idx, c in enumerate(contexts, 1):
-                meta = c.get("metadata", {})
-                fallback_answer += f"**Snippet {idx} (Page {meta.get('page')}, {meta.get('heading')}):**\n{c['text'][:300]}...\n\n"
-
+            # Clear system error when LLM is unavailable; do NOT present raw context text as answer
             return {
-                "answer": fallback_answer,
-                "sources": sources,
-                "grounded": True,
+                "answer": "The language model is currently unavailable. Please try again later.",
+                "sources": [],
+                "grounded": False,
                 "warning": f"LLM Connection Error: {str(e)}"
             }
 
         return {
-            "answer": "Failed to generate LLM response.",
-            "sources": sources,
+            "answer": "The language model is currently unavailable. Please try again later.",
+            "sources": [],
             "grounded": False
         }
