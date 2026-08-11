@@ -2,6 +2,15 @@ import pytest
 from app.services.rag_chain import RAGChain
 
 
+def test_rag_chain_greeting_response():
+    chain = RAGChain()
+    for greeting in ["hello", "hi there", "who are you", "Good Morning"]:
+        result = chain.generate_response(greeting, contexts=[])
+        assert result["grounded"] is True
+        assert result["sources"] == []
+        assert "private medical ai assistant" in result["answer"].lower()
+
+
 def test_rag_chain_refusal_when_insufficient_evidence():
     chain = RAGChain()
     result = chain.generate_response("What is quantum entanglement in cardiology?", contexts=[])
