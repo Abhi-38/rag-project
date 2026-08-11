@@ -94,7 +94,8 @@ Format your response clearly using bullet points and section headings where appr
         ]
 
         try:
-            res = requests.post(f"{self.ollama_url}/api/chat", json=payload, timeout=120)
+            # Increase HTTP timeout to 300s (5 min) for local CPU LLM inference
+            res = requests.post(f"{self.ollama_url}/api/chat", json=payload, timeout=300)
             if res.status_code == 200:
                 answer = res.json().get("message", {}).get("content", "")
                 return {
@@ -105,14 +106,14 @@ Format your response clearly using bullet points and section headings where appr
         except Exception as e:
             # Clear system error when LLM is unavailable; do NOT present raw context text as answer
             return {
-                "answer": "The language model is currently unavailable. Please try again later.",
+                "answer": "The language model is currently processing or unavailable. Please try again later.",
                 "sources": [],
                 "grounded": False,
                 "warning": f"LLM Connection Error: {str(e)}",
             }
 
         return {
-            "answer": "The language model is currently unavailable. Please try again later.",
+            "answer": "The language model is currently processing or unavailable. Please try again later.",
             "sources": [],
             "grounded": False,
         }
