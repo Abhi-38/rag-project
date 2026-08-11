@@ -1,6 +1,8 @@
+from typing import Any, Dict, List
 import requests
-from typing import List, Dict, Any
+
 from app.core.config import settings
+
 
 class RAGChain:
     """Manages medical context synthesis, LLM generation, citation formatting, and refusal handling."""
@@ -19,6 +21,19 @@ Format your response clearly using bullet points and section headings where appr
     def __init__(self, ollama_url: str = settings.OLLAMA_BASE_URL, model: str = settings.LLM_MODEL):
         self.ollama_url = ollama_url
         self.model = model
+
+    @staticmethod
+    def is_greeting(query: str) -> bool:
+        """Determines if query is a conversational greeting or general assistant introduction."""
+        cleaned = query.strip().lower().rstrip(".!?")
+        greetings = {
+            "hello", "hi", "hey", "greetings", "good morning",
+            "good afternoon", "good evening", "howdy", "hola",
+            "who are you", "what are you", "help", "who are u", "hi there", "hello there"
+        }
+        if cleaned in greetings or cleaned.startswith(("hi ", "hello ", "hey ", "greetings ")):
+            return True
+        return False
 
     def build_user_prompt(self, query: str, contexts: List[Dict[str, Any]]) -> str:
         """Formats query and context snippets into a grounded LLM prompt."""
@@ -39,12 +54,20 @@ Format your response clearly using bullet points and section headings where appr
 
     def generate_response(self, query: str, contexts: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Generates grounded response using Ollama local API or structured refusal/error handling."""
-        # 1. Evidence sufficiency check refusal
+        # 1. Greeting & conversational intent handler
+        if self.is_greeting(query):
+            return {
+                "answer": "Hello! I am your private Medical AI Assistant. I can help answer clinical questions, explain medical concepts, and summarize topics directly from your uploaded MBBS textbooks and study documents. How can I assist your studies today?",
+                "sources": [],
+                "grounded": True,
+            }
+
+        # 2. Evidence sufficiency check refusal
         if not contexts:
             return {
                 "answer": "I could not find sufficient evidence in the uploaded medical documents to answer this question.",
                 "sources": [],
-                "grounded": False
+                "grounded": False,
             }
 
         prompt = self.build_user_prompt(query, contexts)
@@ -53,31 +76,31 @@ Format your response clearly using bullet points and section headings where appr
             "model": self.model,
             "messages": [
                 {"role": "system", "content": self.SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             "options": {
-                "temperature": settings.LLM_TEMPERATURE
+                "temperature": settings.LLM_TEMPERATURE,
             },
-            "stream": False
+            "stream": False,
         }
 
         sources = [
             {
                 "source": c.get("metadata", {}).get("source"),
                 "page": c.get("metadata", {}).get("page"),
-                "heading": c.get("metadata", {}).get("heading")
+                "heading": c.get("metadata", {}).get("heading"),
             }
             for c in contexts
         ]
 
         try:
-            res = requests.post(f"{self.ollama_url}/api/chat", json=payload, timeout=60)
+            res = requests.post(f"{self.ollama_url}/api/chat", json=payload, timeout=120)
             if res.status_code == 200:
                 answer = res.json().get("message", {}).get("content", "")
                 return {
                     "answer": answer,
                     "sources": sources,
-                    "grounded": True
+                    "grounded": True,
                 }
         except Exception as e:
             # Clear system error when LLM is unavailable; do NOT present raw context text as answer
@@ -85,11 +108,11 @@ Format your response clearly using bullet points and section headings where appr
                 "answer": "The language model is currently unavailable. Please try again later.",
                 "sources": [],
                 "grounded": False,
-                "warning": f"LLM Connection Error: {str(e)}"
+                "warning": f"LLM Connection Error: {str(e)}",
             }
 
         return {
             "answer": "The language model is currently unavailable. Please try again later.",
             "sources": [],
-            "grounded": False
+            "grounded": False,
         }
