@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # FastAPI Web Application & RAG Engine
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medical_rag_app
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=MedicalRAGAssistant
+      - ENV=production
+      - LLM_MODEL=${LLM_MODEL:-llama3:latest}
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.0}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-m3}
+      - VECTOR_DB=chromadb
+      - VECTOR_DB_DIR=/app/vectorstore
+      - EVIDENCE_THRESHOLD=${EVIDENCE_THRESHOLD:-0.015}
+    volumes:
+      - ./vectorstore:/app/vectorstore
+      - ./data:/app/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Local Ollama LLM Service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: medical_rag_ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+    expose:
+      - "11434"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # Idempotent Model Initializer (Downloads llama3:latest on first run only)
+  ollama-init:
+    image: curlimages/curl:latest
+    container_name: medical_rag_ollama_init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "if curl -s http://ollama:11434/api/tags | grep -q 'llama3:latest'; then
+        echo '[Ollama Init] Model llama3:latest already present in persistent volume. Skipping download.';
+      else
+        echo '[Ollama Init] Model llama3:latest not found in volume. Downloading (first run only)...';
+        curl -s -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3:latest\"}';
+        echo '[Ollama Init] Model initialization complete.';
+      fi"
+    restart: "no"
+
+volumes:
+  ollama_data:
+    name: medical_rag_ollama_data
