@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     ENV: str = os.getenv("ENV", "development")
 
     # LLM Configuration
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "llama3.1")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "llama3:latest")
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.0"))
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 

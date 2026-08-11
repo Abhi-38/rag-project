@@ -27,8 +27,6 @@ class QueryResponse(BaseModel):
 embedder = EmbeddingService()
 vector_store = VectorStoreService()
 hybrid_retriever = HybridRetriever(vector_store=vector_store, embedder=embedder)
-rag_chain = RAGChain()
-
 @router.post("", response_model=QueryResponse)
 def query_medical_assistant(req: QueryRequest):
     """Submits a medical query to the Hybrid RAG pipeline."""
@@ -39,6 +37,7 @@ def query_medical_assistant(req: QueryRequest):
     contexts = hybrid_retriever.retrieve(req.query)
 
     # 2. Grounded LLM Context Synthesis & Citation Generation
+    rag_chain = RAGChain()
     result = rag_chain.generate_response(req.query, contexts)
 
     return QueryResponse(
