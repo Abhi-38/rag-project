@@ -1,0 +1,44 @@
+# Git files
+.git
+.gitignore
+.github
+
+# Virtual Environments
+.venv
+venv
+ENV
+env
+env.bak
+venv.bak
+
+# Python Bytecode & Cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+htmlcov
+
+# Environment & Secret Files
+.env
+.env.*
+!.env.example
+
+# Vector Database & Data Storage (Mounted via Docker Volumes)
+vectorstore/
+data/raw/
+data/processed/
+
+# IDE & OS Artifacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build Artifacts & Logs
+build/
+dist/
+*.egg-info
+*.log
+logs/
