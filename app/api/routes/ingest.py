@@ -1,7 +1,8 @@
+import asyncio
 from pathlib import Path
 from typing import Any, Dict
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.ingestion.loaders.pipeline import IngestionPipeline
@@ -90,17 +91,23 @@ def get_ingestion_progress():
 
 
 @router.post("")
-def ingest_document(req: IngestRequest):
-    """Triggers document ingestion pipeline from file path."""
-    res = process_document_ingestion(req.file_path)
-    if res.get("status") == "error":
-        raise HTTPException(status_code=400, detail=res["message"])
-    return res
+def ingest_document(req: IngestRequest, background_tasks: BackgroundTasks):
+    """Triggers document ingestion pipeline in background so event loop remains unblocked for progress polling."""
+    path = Path(req.file_path)
+    if not path.exists():
+        raise HTTPException(status_code=400, detail=f"File not found at {req.file_path}")
+
+    background_tasks.add_task(process_document_ingestion, str(path))
+    return {
+        "status": "processing",
+        "file": path.name,
+        "message": f"Document ingestion started in background for {path.name}.",
+    }
 
 
 @router.post("/upload")
-async def upload_and_ingest_document(file: UploadFile = File(...)):
-    """Uploads a PDF or DOCX document and triggers document ingestion pipeline."""
+async def upload_and_ingest_document(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    """Uploads a document and triggers ingestion in background so progress polling updates in real-time."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename missing.")
 
@@ -118,7 +125,9 @@ async def upload_and_ingest_document(file: UploadFile = File(...)):
     with open(file_path, "wb") as f:
         f.write(content)
 
-    res = process_document_ingestion(str(file_path))
-    if res.get("status") == "error":
-        raise HTTPException(status_code=400, detail=res["message"])
-    return res
+    background_tasks.add_task(process_document_ingestion, str(file_path))
+    return {
+        "status": "processing",
+        "file": file.filename,
+        "message": f"Document ingestion started in background for {file.filename}.",
+    }
