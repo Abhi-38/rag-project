@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.ingestion.loaders.pipeline import IngestionPipeline
 from app.services.embedding_service import EmbeddingService
+from app.services.progress_tracker import progress_tracker
 from app.services.vector_store import VectorStoreService
 
 router = APIRouter(prefix="/api/ingest", tags=["Ingestion"])
@@ -22,36 +23,55 @@ pipeline = IngestionPipeline()
 
 
 def process_document_ingestion(doc_path: str) -> Dict[str, Any]:
-    """Canonical document ingestion pipeline function: Parses, chunks (Parent-Child), embeds, and stores in ChromaDB."""
+    """Canonical document ingestion pipeline function with real-time progress, percentage, and ETA reporting."""
     path = Path(doc_path)
     if not path.exists():
-        return {"status": "error", "message": f"File not found at {doc_path}"}
+        msg = f"File not found at {doc_path}"
+        progress_tracker.error(msg)
+        return {"status": "error", "message": msg}
 
-    # 1. Parse & Parent-Child Chunking
-    chunks_dict = pipeline.process_file(str(path))
-    parents = chunks_dict.get("parents", [])
-    children = chunks_dict.get("children", [])
+    try:
+        # Start Progress Tracking
+        progress_tracker.start(path.name)
 
-    if not children:
-        return {"status": "error", "message": "No readable text extracted from document."}
+        # 1. Parse & Parent-Child Chunking
+        progress_tracker.update_stage("Parsing document into semantic parent-child sections...", 1, 15.0)
+        chunks_dict = pipeline.process_file(str(path))
+        parents = chunks_dict.get("parents", [])
+        children = chunks_dict.get("children", [])
 
-    # 2. Store Parent Chunks in Persistent Parent Store
-    vector_store.add_parent_chunks(parents)
+        if not children:
+            msg = "No readable text extracted from document."
+            progress_tracker.error(msg)
+            return {"status": "error", "message": msg}
 
-    # 3. Generate Dense Embeddings for Child Chunks
-    child_texts = [c["text"] for c in children]
-    embeddings = embedder.embed_documents(child_texts)
+        # 2. Store Parent Chunks in Persistent Parent Store
+        progress_tracker.update_stage("Storing parent contexts in database...", 1, 20.0)
+        vector_store.add_parent_chunks(parents)
 
-    # 4. Store Child Chunks & Embeddings in Vector Database
-    vector_store.add_child_chunks(children=children, embeddings=embeddings)
+        # 3. Generate Dense Embeddings for Child Chunks (with batch progress & ETA)
+        child_texts = [c["text"] for c in children]
+        embeddings = embedder.embed_documents(
+            child_texts, progress_callback=progress_tracker.update_embedding_progress
+        )
 
-    return {
-        "status": "success",
-        "file": path.name,
-        "parent_chunks_indexed": len(parents),
-        "child_chunks_indexed": len(children),
-        "vector_db_child_count": vector_store.count(),
-    }
+        # 4. Store Child Chunks & Embeddings in Vector Database
+        progress_tracker.update_stage("Indexing vectors into ChromaDB...", 3, 95.0)
+        vector_store.add_child_chunks(children=children, embeddings=embeddings)
+
+        # Complete Progress Tracking
+        progress_tracker.complete(len(parents), len(children))
+
+        return {
+            "status": "success",
+            "file": path.name,
+            "parent_chunks_indexed": len(parents),
+            "child_chunks_indexed": len(children),
+            "vector_db_child_count": vector_store.count(),
+        }
+    except Exception as e:
+        progress_tracker.error(str(e))
+        return {"status": "error", "message": str(e)}
 
 
 @router.get("/stats")
@@ -61,6 +81,12 @@ def get_ingestion_stats():
         "status": "online",
         "total_child_chunks": vector_store.count(),
     }
+
+
+@router.get("/progress")
+def get_ingestion_progress():
+    """Returns current real-time ingestion stage, percentage, and ETA."""
+    return progress_tracker.get_progress()
 
 
 @router.post("")
