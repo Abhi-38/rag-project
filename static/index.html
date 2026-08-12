@@ -621,6 +621,51 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* Real-Time Glassmorphic Progress Bar Component */
+        .progress-box {
+            margin-top: 1.2rem;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            padding: 1.2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .progress-bar-track {
+            width: 100%;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-indigo));
+            border-radius: 6px;
+            transition: width 0.3s ease;
+            box-shadow: 0 0 12px rgba(6, 182, 212, 0.5);
+        }
+
+        .progress-details {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
     </style>
 </head>
 <body>
@@ -757,37 +802,22 @@
                         Select or upload a document to begin processing into ChromaDB.
                     </div>
 
-                    <div class="progress-list" id="progress-list" style="display: none">
-                        <div class="progress-step active" id="step-1">
-                            <div class="step-icon"><i class="fa-solid fa-file-code"></i></div>
-                            <div>
-                                <div style="font-weight: 600; font-size: 0.88rem; color: #fff;">1. Document Parsing & Heading Extraction</div>
-                                <div style="font-size: 0.76rem; color: var(--text-muted)">PyMuPDF / DOCX page & chapter parsing</div>
-                            </div>
+                    <!-- Dynamic Real-Time Progress Bar Component -->
+                    <div class="progress-box" id="progress-box" style="display: none;">
+                        <div class="progress-header">
+                            <span id="progress-stage-text" style="font-weight: 600; color: #fff;">
+                                <i class="fa-solid fa-spinner fa-spin" style="color: var(--accent-cyan)"></i> Processing document...
+                            </span>
+                            <span id="progress-percentage" style="font-weight: 700; color: var(--accent-cyan); font-size: 1rem;">0%</span>
                         </div>
-                        <div class="progress-step" id="step-2">
-                            <div class="step-icon"><i class="fa-solid fa-sitemap"></i></div>
-                            <div>
-                                <div style="font-weight: 600; font-size: 0.88rem; color: #fff;">2. Parent-Child Chunking</div>
-                                <div style="font-size: 0.76rem; color: var(--text-muted)">Parent: 1000ch | Child: 250ch linked chunks</div>
-                            </div>
+                        <div class="progress-bar-track">
+                            <div class="progress-bar-fill" id="progress-bar-fill"></div>
                         </div>
-                        <div class="progress-step" id="step-3">
-                            <div class="step-icon"><i class="fa-solid fa-vector-square"></i></div>
-                            <div>
-                                <div style="font-weight: 600; font-size: 0.88rem; color: #fff;">3. BGE-M3 Dense Embedding Generation</div>
-                                <div style="font-size: 0.76rem; color: var(--text-muted)">SentenceTransformers vector encoding</div>
-                            </div>
-                        </div>
-                        <div class="progress-step" id="step-4">
-                            <div class="step-icon"><i class="fa-solid fa-database"></i></div>
-                            <div>
-                                <div style="font-weight: 600; font-size: 0.88rem; color: #fff;">4. ChromaDB Dual-Collection Indexing</div>
-                                <div style="font-size: 0.76rem; color: var(--text-muted)">Persistent child & parent collections</div>
-                            </div>
+                        <div class="progress-details">
+                            <span id="progress-elapsed">⏱️ Elapsed: 0s</span>
+                            <span id="progress-eta" style="color: var(--accent-cyan); font-weight: 600;">⏱️ ETA: Calculating...</span>
                         </div>
                     </div>
-
                 </div>
 
             </div>
@@ -1002,15 +1032,55 @@
             }
         }
 
+        let progressInterval = null;
+
+        function startProgressPolling() {
+            const progressBox = document.getElementById('progress-box');
+            progressBox.style.display = 'flex';
+
+            if (progressInterval) clearInterval(progressInterval);
+
+            progressInterval = setInterval(async () => {
+                try {
+                    const res = await fetch('/api/ingest/progress');
+                    if (!res.ok) return;
+                    const data = await res.json();
+
+                    if (data.status === 'processing') {
+                        document.getElementById('progress-stage-text').innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="color: var(--accent-cyan)"></i> ${escapeHTML(data.stage)}`;
+                        document.getElementById('progress-percentage').innerText = `${data.percentage}%`;
+                        document.getElementById('progress-bar-fill').style.width = `${data.percentage}%`;
+                        document.getElementById('progress-elapsed').innerText = `⏱️ Elapsed: ${data.elapsed_seconds}s`;
+
+                        if (data.estimated_remaining_seconds > 0) {
+                            document.getElementById('progress-eta').innerText = `⏱️ Estimated remaining: ~${data.estimated_remaining_seconds}s`;
+                        } else {
+                            document.getElementById('progress-eta').innerText = `⏱️ Estimated remaining: Calculating...`;
+                        }
+                    } else if (data.status === 'completed') {
+                        document.getElementById('progress-stage-text').innerHTML = `<i class="fa-solid fa-circle-check" style="color: var(--accent-emerald)"></i> Ingestion Complete!`;
+                        document.getElementById('progress-percentage').innerText = `100%`;
+                        document.getElementById('progress-bar-fill').style.width = `100%`;
+                        document.getElementById('progress-eta').innerText = `⏱️ Complete (${data.elapsed_seconds}s total)`;
+                        clearInterval(progressInterval);
+                    } else if (data.status === 'error') {
+                        document.getElementById('progress-stage-text').innerHTML = `<i class="fa-solid fa-circle-xmark" style="color: var(--accent-rose)"></i> ${escapeHTML(data.stage)}`;
+                        clearInterval(progressInterval);
+                    }
+                } catch (err) {
+                    console.error('Progress poll error:', err);
+                }
+            }, 400);
+        }
+
         async function uploadFile(file) {
             const formData = new FormData();
             formData.append('file', file);
 
             const resultBox = document.getElementById('ingestion-result-box');
-            const progressList = document.getElementById('progress-list');
-
-            progressList.style.display = 'flex';
             resultBox.innerHTML = `<div style="display: flex; align-items: center; gap: 0.5rem;"><div class="spinner"></div> Ingesting document: <b>${escapeHTML(file.name)}</b>...</div>`;
+
+            startProgressPolling();
 
             try {
                 const res = await fetch('/api/ingest/upload', {
@@ -1032,6 +1102,7 @@
                 `;
                 fetchStats();
             } catch (err) {
+                if (progressInterval) clearInterval(progressInterval);
                 resultBox.innerHTML = `<div style="color: var(--accent-rose); font-weight: 600;"><i class="fa-solid fa-circle-xmark"></i> Ingestion Error: ${escapeHTML(err.message)}</div>`;
             }
         }
@@ -1042,6 +1113,8 @@
 
             const resultBox = document.getElementById('ingestion-result-box');
             resultBox.innerHTML = `<div style="display: flex; align-items: center; gap: 0.5rem;"><div class="spinner"></div> Processing document path: <b>${escapeHTML(input)}</b>...</div>`;
+
+            startProgressPolling();
 
             try {
                 const res = await fetch('/api/ingest', {
@@ -1064,6 +1137,7 @@
                 `;
                 fetchStats();
             } catch (err) {
+                if (progressInterval) clearInterval(progressInterval);
                 resultBox.innerHTML = `<div style="color: var(--accent-rose); font-weight: 600;"><i class="fa-solid fa-circle-xmark"></i> Ingestion Error: ${escapeHTML(err.message)}</div>`;
             }
         }

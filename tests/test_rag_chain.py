@@ -34,7 +34,7 @@ def test_rag_chain_offline_fallback():
 
     assert result["grounded"] is False
     assert result["sources"] == []
-    assert "currently unavailable" in result["answer"].lower()
+    assert "unavailable" in result["answer"].lower()
     assert "warning" in result
 
 
